@@ -1,0 +1,34 @@
+name: Build NodePulse IPA (unsigned / 编译验证)
+
+# 不依赖任何证书或 Secrets。产出未签名 IPA，用于：
+# 1) 验证工程能否在云 Mac 上完整编译
+# 2) 交给第三方签名平台代签（企业签名 / 超级签名）
+on:
+  workflow_dispatch:
+
+jobs:
+  build-unsigned:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build unsigned IPA
+        run: bash scripts/build_ios_unsigned.sh
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: NodePulse-unsigned-IPA
+          path: build/export/*.ipa
+          if-no-files-found: error
+          retention-days: 30
