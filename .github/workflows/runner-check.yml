@@ -1,0 +1,11 @@
+name: Runner check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Say hello
+        run: echo "UBUNTU_RUNNER_OK $(date)"
