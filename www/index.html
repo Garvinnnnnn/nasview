@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="NodePulse" />
+  <title>NodePulse · 节点脉搏</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="manifest" href="manifest.json" />
+</head>
+<body>
+  <!-- 桌面预览时的手机外框由 .device 承担；真机上铺满 -->
+  <div class="device" id="device">
+    <!-- 启动页 -->
+    <section class="screen splash" id="screen-splash">
+      <div class="splash-bg"></div>
+      <div class="splash-inner">
+        <div class="brand-mark">
+          <svg viewBox="0 0 64 64" width="72" height="72" aria-hidden="true">
+            <defs>
+              <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#5eead4"/>
+                <stop offset="1" stop-color="#3b82f6"/>
+              </linearGradient>
+            </defs>
+            <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#lg)"/>
+            <path d="M14 33 h9 l5 -12 l7 22 l5 -12 h10" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h1 class="splash-title">NodePulse</h1>
+        <p class="splash-sub">节点脉搏 · 让设备状态保持在视线之内</p>
+        <div class="splash-loader"><span></span></div>
+      </div>
+    </section>
+
+    <!-- 引导 / 绑定页 -->
+    <section class="screen onboarding hidden" id="screen-onboarding">
+      <div class="onboard-scroll">
+        <div class="onboard-hero">
+          <div class="brand-mark small">
+            <svg viewBox="0 0 64 64" width="52" height="52" aria-hidden="true">
+              <defs>
+                <linearGradient id="lg-onboard" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#5eead4"/>
+                  <stop offset="1" stop-color="#3b82f6"/>
+                </linearGradient>
+              </defs>
+              <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#lg-onboard)"/>
+              <path d="M14 33 h9 l5 -12 l7 22 l5 -12 h10" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <h1>设备状态<br/>随时都在手边</h1>
+          <p>一屏看完 NAS / 服务器的核心指标<br/>异常更早被看见</p>
+        </div>
+
+        <div class="feature-list">
+          <div class="feature-item"><span class="fi-ico" data-icon="activity"></span><div><b>一屏看明白</b><small>状态、硬盘、存储、温度、网络、容器</small></div></div>
+          <div class="feature-item"><span class="fi-ico" data-icon="shield"></span><div><b>安全授权</b><small>TOKEN 与扫码绑定，避免未授权访问</small></div></div>
+          <div class="feature-item"><span class="fi-ico" data-icon="server"></span><div><b>多节点集中</b><small>NAS、服务器、迷你主机统一呈现</small></div></div>
+        </div>
+
+        <div class="onboard-actions">
+          <button class="btn primary" id="btn-scan">扫码添加节点</button>
+          <button class="btn ghost" id="btn-token">使用 TOKEN 连接</button>
+          <button class="btn text" id="btn-demo">先用演示数据体验 →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 主应用 -->
+    <section class="screen app hidden" id="screen-app">
+      <header class="app-header" id="app-header">
+        <button class="node-switch" id="node-switch">
+          <span class="ns-dot" id="ns-dot"></span>
+          <span class="ns-text">
+            <b id="ns-name">我的 NAS</b>
+            <small id="ns-sub">在线 · 本地连接</small>
+          </span>
+          <span class="ns-caret" data-icon="chevron-down"></span>
+        </button>
+        <button class="icon-btn" id="btn-refresh" aria-label="刷新" data-icon="refresh-cw"></button>
+      </header>
+
+      <main class="app-main" id="app-main">
+        <!-- 由 JS 渲染各页面 -->
+        <div class="page" id="page-dashboard"></div>
+        <div class="page hidden" id="page-nodes"></div>
+        <div class="page hidden" id="page-settings"></div>
+      </main>
+
+      <nav class="tabbar" id="tabbar">
+        <button class="tab active" data-tab="dashboard"><span data-icon="layout-dashboard"></span><small>总览</small></button>
+        <button class="tab" data-tab="nodes"><span data-icon="server"></span><small>节点</small></button>
+        <button class="tab" data-tab="settings"><span data-icon="settings-2"></span><small>设置</small></button>
+      </nav>
+    </section>
+
+    <!-- 弹层容器 -->
+    <div class="sheet-backdrop hidden" id="sheet-backdrop"></div>
+    <div class="sheet hidden" id="sheet"></div>
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <script src="js/icons.js"></script>
+  <script src="js/mock.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

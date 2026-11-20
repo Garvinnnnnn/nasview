@@ -1,0 +1,20 @@
+{
+  "name": "nodepulse-ios",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NodePulse 节点脉搏 - 仿制演示客户端 (Capacitor iOS sideload build)",
+  "scripts": {
+    "serve": "npx serve www -l 8080",
+    "add:ios": "cap add ios",
+    "sync:ios": "cap sync ios",
+    "open:ios": "cap open ios",
+    "build:prepare": "node scripts/gen-icons.js && cap sync ios"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/ios": "^6.1.2"
+  }
+}

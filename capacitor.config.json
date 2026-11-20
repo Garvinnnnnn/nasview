@@ -1,0 +1,21 @@
+{
+  "appId": "com.nodepulse.client",
+  "appName": "NodePulse",
+  "webDir": "www",
+  "loggingBehavior": "none",
+  "ios": {
+    "contentInset": "always",
+    "schemeMatchContents": false,
+    "allowsInspectable": false,
+    "backgroundColor": "#0a0f1d",
+    "launchShowDuration": 600,
+    "launchAutoHide": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "backgroundColor": "#0a0f1d",
+      "showSpinner": false
+    }
+  }
+}
