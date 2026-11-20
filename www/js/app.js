@@ -322,6 +322,11 @@
       '<div class="setting-row" id="row-test"><span class="sr-ico">' + Icons.svg('link', 16) + '</span>' +
       '<div class="sr-label"><b>测试连接</b><small>校验服务端与 TOKEN 是否可用</small></div>' +
       '<span class="sr-value">' + Icons.svg('chevron-right', 16) + '</span></div>' +
+
+      '<div class="setting-row" id="row-preview" style="background:var(--grad-soft)">' +
+      '<span class="sr-ico" style="background:var(--grad);color:#fff">' + Icons.svg('activity', 16) + '</span>' +
+      '<div class="sr-label"><b>连接预览测试</b><small>填地址即可预览节点数据，无需保存配置</small></div>' +
+      '<span class="sr-value" style="color:var(--accent)">' + Icons.svg('chevron-right', 16) + '</span></div>' +
       '</div></div>';
 
     html += '<div class="settings-group"><h3>外观</h3><div class="setting-card">' +
@@ -383,6 +388,8 @@
       Provider.getNodes().then(function () { toast('连接成功 ✓'); })
         .catch(function (e) { toast('连接失败：' + e.message); });
     };
+
+    var preview = $('#row-preview'); if (preview) preview.onclick = showPreviewSheet;
 
     var sw = $('#sw-theme'); if (sw) sw.onclick = function () {
       var next = Provider.config().theme === 'light' ? 'dark' : 'light';
@@ -456,6 +463,65 @@
       doBind(token);
     };
     $('#tk-cancel').onclick = closeSheet;
+  }
+
+  // 连接预览测试：输入地址/TOKEN -> 请求 -> 展示节点摘要，不改动已保存配置
+  function showPreviewSheet() {
+    var c = Provider.config();
+    openSheet(
+      '<h2>连接预览测试</h2>' +
+      '<p class="sheet-desc">输入 NAS 服务端地址与 TOKEN，直接预览它能返回的节点数据。此测试不会修改你已保存的连接配置。</p>' +
+      '<div class="field"><label>服务端地址</label><input class="input" id="pv-server" placeholder="http://192.168.1.10:8787" value="' + esc(c.server) + '" /></div>' +
+      '<div class="field"><label>连接 TOKEN（可选，仅校验时能通就用）</label><input class="input" id="pv-token" placeholder="粘贴 TOKEN" value="' + esc(c.token) + '" /></div>' +
+      '<div class="sheet-actions"><button class="btn primary" id="pv-run">' + Icons.svg('activity', 16) + ' 开始预览测试</button>' +
+      '<button class="btn ghost" id="pv-cancel">取消</button></div>' +
+      '<div id="pv-result" style="margin-top:14px"></div>'
+    );
+    $('#pv-cancel').onclick = closeSheet;
+    $('#pv-run').onclick = function () {
+      var server = $('#pv-server').value.trim();
+      var token = $('#pv-token').value.trim();
+      var box = $('#pv-result');
+      var btn = $('#pv-run');
+      btn.disabled = true;
+      box.innerHTML = '<div class="card" style="margin:0;text-align:center;padding:22px">' +
+        '<div style="color:var(--accent)">' + Icons.svg('refresh-cw', 24) + '</div>' +
+        '<div style="font-size:12px;color:var(--text-2);margin-top:10px">正在连接 ' + esc(server || '（未填地址）') + ' …</div></div>';
+      Provider.testConnection(server, token).then(function (r) {
+        btn.disabled = false;
+        var nodesHtml = r.nodes.map(function (n) {
+          return '<div class="ct-item"><div class="ct-ico ' + (n.online ? '' : 'warn') + '">' + Icons.svg('server', 16) + '</div>' +
+            '<div class="ct-main"><b>' + esc(n.name) + '</b><small>' + esc(n.type) + ' · CPU ' + (n.cpu != null ? n.cpu + '%' : '—') +
+            ' · 内存 ' + (n.mem != null ? n.mem + '%' : '—') + '</small></div>' +
+            '<span class="badge ' + (n.online ? 'ok' : 'mute') + '"><i class="dot"></i>' + (n.online ? '在线' : '离线') + '</span></div>';
+        }).join('');
+        box.innerHTML = '<div class="card" style="margin:0">' +
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
+          '<span class="badge ok"><i class="dot"></i>连接成功</span>' +
+          '<span style="font-size:11px;color:var(--text-3);margin-left:auto">耗时 ' + r.ms + ' ms</span></div>' +
+          '<div style="font-size:11px;color:var(--text-3);word-break:break-all;margin-bottom:8px">' + esc(r.url) + '</div>' +
+          '<div style="font-size:12px;margin-bottom:6px">发现 <b>' + r.count + '</b> 个节点</div>' +
+          (nodesHtml || '<div style="color:var(--text-3);font-size:11px">接口返回了空节点列表</div>') +
+          '<button class="btn ghost" id="pv-apply" style="margin-top:12px;width:100%;height:42px">使用这组配置并绑定</button>' +
+          '</div>';
+        $('#pv-apply').onclick = function () {
+          Provider.setServer(server);
+          doBind(token || Provider.config().token);
+        };
+      }).catch(function (e) {
+        btn.disabled = false;
+        box.innerHTML = '<div class="card" style="margin:0;border-color:rgba(255,107,122,.3)">' +
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+          '<span style="color:var(--danger)">' + Icons.svg('alert-triangle', 18) + '</span>' +
+          '<b style="font-size:13px;color:var(--danger)">连接失败</b>' +
+          '<span style="font-size:11px;color:var(--text-3);margin-left:auto">' + (e.ms != null ? e.ms + ' ms' : '') + '</span></div>' +
+          '<div style="font-size:12px;color:var(--text);margin-bottom:6px">' + esc(e.friendly || e.message || '未知错误') + '</div>' +
+          '<div style="font-size:11px;color:var(--text-3);word-break:break-all">' + esc(e.url || '') + '</div>' +
+          '<div style="font-size:11px;color:var(--text-2);margin-top:10px;line-height:1.7;border-top:1px solid var(--border);padding-top:10px">' +
+          '排查建议：<br/>① 确认服务端已启动且监听 0.0.0.0<br/>② 手机与 NAS 在同一局域网<br/>③ 地址用 http:// 开头并带正确端口<br/>④ TOKEN 与服务端生成的一致</div>' +
+          '</div>';
+      });
+    };
   }
 
   function doBind(token) {

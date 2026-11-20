@@ -44,9 +44,25 @@
       ip: n.ip || '—', mac: n.mac || '—', os: n.os || '—', uptime: n.uptime || '—',
       lastSeen: n.lastSeen || (n.online !== false ? '刚刚' : '未知'),
       services: n.services || { ok: 0, total: 0, list: [] },
-      cpu: n.cpu || { usage: 0, cores: 0, model: '—', temp: 0, load: [0, 0, 0], history: [] },
-      memory: n.memory || { used: 0, total: 0, usage: 0, history: [] },
-      storage: n.storage || { used: 0, total: 0, usage: 0, pools: [] },
+      // 列表接口常用简写字段 cpuUsage/memUsage/storageUsage -> 归一化到嵌套结构
+      cpu: (function () {
+        var base = { usage: 0, cores: 0, model: '—', temp: 0, load: [0, 0, 0], history: [] };
+        var c = Object.assign(base, n.cpu || {});
+        if (!n.cpu && n.cpuUsage != null) c.usage = n.cpuUsage;
+        return c;
+      })(),
+      memory: (function () {
+        var base = { used: 0, total: 0, usage: 0, history: [] };
+        var m = Object.assign(base, n.memory || {});
+        if (!n.memory && n.memUsage != null) m.usage = n.memUsage;
+        return m;
+      })(),
+      storage: (function () {
+        var base = { used: 0, total: 0, usage: 0, pools: [] };
+        var s = Object.assign(base, n.storage || {});
+        if (!n.storage && n.storageUsage != null) s.usage = n.storageUsage;
+        return s;
+      })(),
       disks: n.disks || [],
       temps: n.temps || { cpu: 0, disk: 0, board: 0, max: 0 },
       fans: n.fans || [],
@@ -129,6 +145,59 @@
       return request('/api/v1/nodes').then(function (data) {
         var list = Array.isArray(data) ? data : (data.nodes || data.data || []);
         return list.map(normalizeNode);
+      });
+    },
+
+    // 连接预览测试：用临时参数请求，不写入已保存配置。返回耗时、状态、节点摘要。
+    testConnection: function (server, token) {
+      server = (server || '').trim().replace(/\/+$/, '');
+      if (!server) return Promise.reject(new Error('请填写服务端地址'));
+      if (!/^https?:\/\//i.test(server)) server = 'http://' + server;
+      var start = Date.now();
+      var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var opts = {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer ' + (token || ''),
+          'X-Client': 'NodePulse-iOS'
+        }
+      };
+      if (ctrl) { opts.signal = ctrl.signal; setTimeout(function () { ctrl.abort(); }, 10000); }
+      return fetch(server + '/api/v1/nodes', opts).then(function (res) {
+        var ms = Date.now() - start;
+        if (!res.ok) {
+          var hint = res.status === 401 ? 'TOKEN 无效或已过期' :
+                     res.status === 404 ? '服务端未实现 /api/v1/nodes 接口' :
+                     '服务端返回错误状态';
+          var err = new Error(hint + '（HTTP ' + res.status + '）');
+          err.ms = ms; err.status = res.status;
+          throw err;
+        }
+        return res.json().then(function (data) {
+          var list = Array.isArray(data) ? data : (data.nodes || data.data || []);
+          var nodes = list.map(normalizeNode);
+          return {
+            ok: true,
+            ms: ms,
+            url: server + '/api/v1/nodes',
+            nodes: nodes.map(function (n) {
+              return { id: n.id, name: n.name, type: n.type, online: n.online,
+                       cpu: n.cpu && n.cpu.usage, mem: n.memory && n.memory.usage,
+                       storage: n.storage && n.storage.usage };
+            }),
+            count: nodes.length
+          };
+        });
+      }).catch(function (e) {
+        if (e.ms == null) e.ms = Date.now() - start;
+        if (e.name === 'AbortError' || /abort/i.test(e.message || '')) {
+          e.friendly = '连接超时（10 秒），请检查地址与网络';
+        } else if (/Failed to fetch|NetworkError|fetch/i.test(e.message || '')) {
+          e.friendly = '无法连接服务端，请检查地址、端口与局域网连通性';
+        }
+        e.url = server + '/api/v1/nodes';
+        throw e;
       });
     },
 
