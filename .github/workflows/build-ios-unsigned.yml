@@ -1,10 +1,10 @@
-name: Build NodePulse IPA (unsigned / 编译验证)
+name: Build unsigned IPA
 
-# 不依赖任何证书或 Secrets。产出未签名 IPA，用于：
-# 1) 验证工程能否在云 Mac 上完整编译
-# 2) 交给第三方签名平台代签（企业签名 / 超级签名）
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'unsigned-*'
 
 jobs:
   build-unsigned:
