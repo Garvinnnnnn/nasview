@@ -4,7 +4,7 @@
   "webDir": "www",
   "loggingBehavior": "none",
   "ios": {
-    "contentInset": "always",
+    "contentInset": "never",
     "schemeMatchContents": false,
     "allowsInspectable": false,
     "backgroundColor": "#0a0f1d",

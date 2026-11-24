@@ -126,6 +126,15 @@
     $('#ns-dot').classList.toggle('off', !n.online);
   }
 
+  function tickClock() {
+    var t = $('#dash-clock-time');
+    if (!t) return;
+    var now = new Date();
+    t.textContent = now.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    var d = $('#dash-clock-date');
+    if (d) d.textContent = now.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'long' });
+  }
+
   function renderAll() {
     var n = currentNode();
     $('#page-dashboard').innerHTML = n ? renderDashboard(n) : emptyDashboard();
@@ -133,6 +142,7 @@
     $('#page-settings').innerHTML = renderSettings();
     $$('.page').forEach(function (p) { Icons.hydrate(p); });
     bindPageEvents();
+    tickClock();
   }
 
   /* ---------------- 总览页 ---------------- */
@@ -143,131 +153,188 @@
       '<button class="btn primary" id="empty-add" style="margin-top:12px;width:100%">添加节点</button></div>';
   }
 
+  function panelHead(icon, title, right) {
+    return '<div class="panel-head"><div class="panel-title">' + Icons.svg(icon, 16) + ' ' + title + '</div>' + (right || '') + '</div>';
+  }
+  function specItem(label, value, cls) {
+    return '<div class="spec-item"><small>' + label + '</small><b class="' + (cls || '') + '">' + value + '</b></div>';
+  }
+  function rateBox(label, value, cls) {
+    var ico = cls === 'up' ? 'arrow-up-right' : 'download';
+    return '<div class="rate-box ' + cls + '"><small>' + Icons.svg(ico, 12) + ' ' + label + '</small><b>' + value + '</b></div>';
+  }
+  function summaryCell(label, value, cls) {
+    return '<div><small>' + label + '</small><b class="' + (cls || '') + '">' + value + '</b></div>';
+  }
+
   function renderDashboard(n) {
     var c = Provider.config();
     var online = n.online;
     var svcOk = n.services.ok || 0, svcTotal = n.services.total || 0;
+    var net = n.network || {};
+    var s = n.storage || { used: 0, total: 0, usage: 0, pools: [] };
+    var disks = n.disks || [];
+    var fans = n.fans || [];
+    var containers = n.containers || [];
+    var loadArr = (n.cpu.load || [0, 0, 0]).map(function (x) { return Number(x) || 0; });
+    while (loadArr.length < 3) loadArr.push(0);
+    var loadPct = Math.min(100, (loadArr[0] / (n.cpu.cores || 1)) * 100);
+    var onlineNodes = state.nodes.filter(function (x) { return x.online; }).length;
+    var totalNodes = state.nodes.length;
+    var totalRpm = fans.reduce(function (sum, f) { return sum + (Number(f.rpm) || 0); }, 0);
+    var activeFans = fans.filter(function (f) { return Number(f.rpm) > 0; }).length;
+    var diskHealthy = disks.filter(function (d) { return healthClass(d.health) === 'ok'; }).length;
+    var runningCt = containers.filter(function (ct) { return ct.status === '运行中'; }).length;
+    var cpuTemp = Number(n.temps && n.temps.cpu) || 0;
+    var tempCls = cpuTemp >= 70 ? 'danger' : cpuTemp >= 60 ? 'warn' : 'ok';
+    var tempLabel = cpuTemp >= 70 ? '温度偏高' : cpuTemp >= 60 ? '温度注意' : '温度正常';
     var html = '';
 
-    // 离线横幅
+    html += '<div class="dash">';
+
     if (!online) {
-      html += '<div class="card" style="border-color:rgba(255,107,122,.3);background:linear-gradient(135deg,rgba(255,107,122,.1),var(--card));display:flex;gap:12px;align-items:center">' +
-        '<span style="color:var(--danger)">' + Icons.svg('alert-triangle', 22) + '</span>' +
-        '<div style="flex:1"><b style="font-size:13px">节点当前离线</b>' +
-        '<small style="color:var(--text-2);font-size:11px;display:block;margin-top:2px">上次在线：' + esc(n.lastSeen) + ' · 以下为最近一次上报的数据</small></div></div>';
+      html += '<div class="notice"><span class="notice-ico">' + Icons.svg('alert-triangle', 22) + '</span>' +
+        '<div><b>节点当前离线</b><small>上次在线：' + esc(n.lastSeen) + ' · 以下为最近一次上报的数据</small></div></div>';
     }
 
-    // 状态大卡
-    html += '<div class="hero-card"><div class="hero-top"><div>' +
-      '<div class="hero-hello">' + esc(n.name) + ' · ' + esc(n.os) + '</div>' +
-      '<div class="hero-status">' + (online ? '运行' : '离线') + ' <span class="em">' + (online ? '正常' : '未连接') + '</span></div>' +
-      '</div><div class="hero-icon">' + Icons.svg(online ? 'activity' : 'alert-triangle', 24) + '</div></div>' +
-      '<div class="hero-chips">' +
-      '<div class="hero-chip"><small>服务状态</small><b class="' + (svcOk === svcTotal && svcTotal > 0 ? 'good' : '') + '">' + svcOk + ' / ' + svcTotal + '</b></div>' +
-      '<div class="hero-chip"><small>运行时长</small><b>' + esc(n.uptime) + '</b></div>' +
-      '<div class="hero-chip"><small>设备类型</small><b style="font-size:12px">' + esc(n.type) + '</b></div>' +
-      '</div></div>';
+    html += '<div class="dash-top">';
 
-    // 三环：CPU / 内存 / 负载
-    var load = n.cpu.load && n.cpu.load[0] != null ? n.cpu.load[0] : 0;
-    var loadPct = Math.min(100, (load / (n.cpu.cores || 1)) * 100);
-    html += '<div class="stat-grid">' +
-      '<div class="stat-card">' + ring(n.cpu.usage, '', n.cpu.usage + '%', 'CPU') + '<b>处理器</b><small>' + esc(n.cpu.cores || '—') + ' 核</small></div>' +
-      '<div class="stat-card">' + ring(n.memory.usage, 'c2', n.memory.usage + '%', '内存') + '<b>内存</b><small>' + esc(n.memory.used) + '/' + esc(n.memory.total) + ' GB</small></div>' +
-      '<div class="stat-card">' + ring(loadPct, 'c3', load.toFixed(2), '负载') + '<b>系统负载</b><small>1 分钟均值</small></div>' +
-      '</div>';
+    // 时钟卡
+    html += '<section class="panel clock-panel">' +
+      panelHead('clock', '本地时间', '<span class="status-pill ' + (online ? 'ok' : 'mute') + '"><i class="dot"></i>' + (online ? '在线' : '离线') + '</span>') +
+      '<div class="clock-time" id="dash-clock-time">--:--:--</div>' +
+      '<div class="clock-date" id="dash-clock-date">正在同步时间</div>' +
+      '<div class="clock-foot">' +
+        '<span>' + Icons.svg('server', 13) + ' 节点 ' + onlineNodes + ' / ' + totalNodes + ' 在线</span>' +
+        '<span>' + Icons.svg('wifi', 13) + ' ' + esc(net.ip || n.ip || '—') + '</span>' +
+        '<span>' + Icons.svg('link', 13) + ' ' + esc(n.connType || '—') + '</span>' +
+      '</div>' +
+      '</section>';
 
-    // 性能资源
-    html += '<div class="card"><div class="card-head"><div class="card-title">' + Icons.svg('cpu', 17) + '性能资源</div>' +
-      '<div class="card-sub">' + esc(n.cpu.model) + '</div></div>' +
-      '<div class="metric"><div class="metric-top"><span>CPU 占用</span><b>' + n.cpu.usage + '%</b></div>' + bar(n.cpu.usage, n.cpu.usage > 80 ? 'danger' : '') + '</div>' +
-      '<div class="metric"><div class="metric-top"><span>内存占用</span><b>' + n.memory.usage + '% · ' + n.memory.used + ' GB</b></div>' + bar(n.memory.usage, n.memory.usage > 85 ? 'warn' : 'c2') + '</div>' +
-      '<div class="metric"><div class="metric-top"><span>负载 (1 / 5 / 15 分钟)</span><b>' + (n.cpu.load || []).map(function (x) { return Number(x).toFixed(2); }).join(' / ') + '</b></div></div>' +
-      spark(n.cpu.history, '#38d6c4') + '</div>';
+    // 设备信息卡
+    html += '<section class="panel identity-panel">' +
+      panelHead('server', '设备名称', '<span class="status-pill ' + (online ? 'ok' : 'danger') + '"><i class="dot"></i>' + (online ? '在线' : '离线') + '</span>') +
+      '<div class="identity-name">' + esc(n.name) + '</div>' +
+      '<div class="identity-sub">NODE ID: ' + esc(n.id) + ' · ' + esc(n.type) + ' · ' + esc(n.location) + '</div>' +
+      '<div class="spec-grid">' +
+        specItem('CPU SPEC', esc(n.cpu.model) + (n.cpu.cores ? ' · ' + esc(n.cpu.cores) + ' 核' : '')) +
+        specItem('MEMORY', esc(n.memory.used) + ' / ' + esc(n.memory.total) + ' GB') +
+        specItem('LOCAL IP', esc(net.ip || n.ip || '—')) +
+        specItem('UPTIME', esc(n.uptime)) +
+        specItem('OS', esc(n.os)) +
+        specItem('SERVICES', svcOk + ' / ' + svcTotal + ' 正常', svcOk === svcTotal && svcTotal > 0 ? 'text-ok' : '') +
+      '</div>' +
+      '</section>';
 
-    // 存储
-    var s = n.storage;
-    html += '<div class="card"><div class="card-head"><div class="card-title">' + Icons.svg('hard-drive', 17) + '存储状态</div>' +
-      '<div class="card-sub">' + s.pools.length + ' 个存储池</div></div>' +
-      '<div class="storage-top"><div class="storage-ring">' + ring(s.usage, '', s.usage + '%', '已用') + '</div>' +
-      '<div class="storage-info"><div class="big">' + fmtSize(s.used) + ' <small>/ ' + fmtSize(s.total) + '</small></div>' +
-      '<p>可用 ' + fmtSize(Math.max(0, s.total - s.used)) + ' · ' + esc(n.type === 'NAS' ? 'Btrfs / ext4' : '本地文件系统') + '</p></div></div>';
-    if (s.pools.length) {
-      html += '<div class="pool-list">';
-      s.pools.forEach(function (p) {
-        html += '<div class="pool-row"><span class="pi">' + Icons.svg('database', 15) + '</span>' +
-          '<div class="pn"><b>' + esc(p.name) + '</b><small>' + esc(p.fs) + ' · ' + fmtSize(p.used) + ' / ' + fmtSize(p.total) + '</small>' +
-          bar(p.usage, p.usage > 85 ? 'warn' : '') + '</div>' +
-          '<div class="pv">' + p.usage + '%<br/><span style="color:var(--text-3)">已用</span></div></div>';
-      });
-      html += '</div>';
-    }
-    html += '</div>';
+    html += '</div>'; // dash-top
 
-    // 硬盘 SMART
-    html += '<div class="card"><div class="card-head"><div class="card-title">' + Icons.svg('hard-drive', 17) + '硬盘 SMART</div>' +
-      '<div class="card-sub">' + n.disks.length + ' 块硬盘</div></div>';
-    if (n.disks.length) {
-      n.disks.forEach(function (d) {
-        var hc = healthClass(d.health);
-        html += '<div class="disk-item"><div class="disk-head">' +
-          '<span class="disk-ico">' + Icons.svg(d.type === 'SSD' ? 'zap' : 'hard-drive', 17) + '</span>' +
-          '<div class="disk-name"><b>' + esc(d.name) + ' · ' + esc(d.size) + '</b><small>' + esc(d.model) + '</small></div>' +
-          '<span class="badge ' + hc + '"><i class="dot"></i>' + esc(d.health) + '</span>' +
-          '<span class="disk-temp ' + (d.temp >= 45 ? 'hot' : '') + '">' + (d.temp ? d.temp + '°C' : '—') + '</span>' +
-          '</div><div class="disk-meta">' + (d.smart || []).map(function (x) { return '<span class="chip">' + esc(x) + '</span>'; }).join('') + '</div></div>';
-      });
-    } else {
-      html += '<div style="color:var(--text-3);font-size:12px;text-align:center;padding:10px">暂无硬盘信息</div>';
-    }
-    html += '</div>';
+    html += '<div class="dash-grid">';
 
-    // 风扇与温度
-    html += '<div class="card"><div class="card-head"><div class="card-title">' + Icons.svg('thermometer', 17) + '风扇与温度</div>' +
-      '<div class="card-sub">最高 ' + (n.temps.max || 0) + '°C</div></div>' +
-      '<div class="temp-grid">' +
-      '<div class="temp-item"><small>' + Icons.svg('cpu', 12) + 'CPU 温度</small><div class="val ' + (n.temps.cpu >= 60 ? 'hot' : '') + '">' + n.temps.cpu + '<span> °C</span></div></div>' +
-      '<div class="temp-item"><small>' + Icons.svg('hard-drive', 12) + '硬盘温度</small><div class="val ' + (n.temps.disk >= 45 ? 'hot' : '') + '">' + n.temps.disk + '<span> °C</span></div></div>' +
-      '</div>';
-    if (n.fans.length) {
-      html += '<div style="margin-top:14px;padding-top:4px">';
-      n.fans.forEach(function (f) {
-        html += '<div class="fan-row"><div class="fl">' + Icons.svg('fan', 14) + esc(f.name) + '</div>' +
-          '<div class="fr">' + (f.rpm ? f.rpm.toLocaleString() + ' RPM' : '—') + '</div></div>';
-      });
-      html += '</div>';
-    }
-    html += '</div>';
+    // 资源负载
+    html += '<section class="panel resource-panel">' +
+      panelHead('activity', '资源负载', '<span class="status-pill ' + (loadPct > 85 ? 'warn' : 'ok') + '"><i class="dot"></i>' + (loadPct > 85 ? '负载偏高' : '负载正常') + '</span>') +
+      '<div class="resource-row">' +
+        '<div class="resource-metric"><small>CPU LOAD</small><b>' + (Number(n.cpu.usage) || 0) + '%</b>' + bar(n.cpu.usage, n.cpu.usage > 80 ? 'danger' : '') + '</div>' +
+        '<div class="resource-metric"><small>MEMORY</small><b>' + (Number(n.memory.usage) || 0) + '%</b>' + bar(n.memory.usage, n.memory.usage > 85 ? 'warn' : 'c2') + '</div>' +
+      '</div>' +
+      '<div class="resource-foot"><span>AVG <b>' + loadArr.map(function (x) { return x.toFixed(2); }).join(' / ') + '</b></span><span>UP <b>' + esc(n.uptime) + '</b></span></div>' +
+      '</section>';
 
     // 网络
-    var net = n.network;
-    html += '<div class="card"><div class="card-head"><div class="card-title">' + Icons.svg('wifi', 17) + '网络与连接</div>' +
-      '<div class="card-sub">' + esc(net.speed) + '</div></div>' +
-      '<div class="ip-row"><div class="ip">' + Icons.svg('globe', 15) + '<b>' + esc(net.ip) + '</b><small>' + esc(net.mask) + '</small></div>' +
-      '<span class="badge ok"><i class="dot"></i>' + (online ? '已连接' : '已断开') + '</span></div>' +
-      '<div class="net-grid">' +
-      '<div class="net-cell"><small>下载速率 ↓</small><b class="down">' + fmtRate(net.rx) + '</b></div>' +
-      '<div class="net-cell"><small>上传速率 ↑</small><b class="up">' + fmtRate(net.tx) + '</b></div>' +
-      '<div class="net-cell"><small>活动连接数</small><b>' + net.conns + '</b></div>' +
-      '<div class="net-cell"><small>MAC 地址</small><b style="font-size:11px">' + esc(net.mac) + '</b></div>' +
-      '</div></div>';
+    html += '<section class="panel network-panel">' +
+      panelHead('wifi', '网络', '<span class="panel-sub">' + esc(net.speed || '—') + '</span>') +
+      '<div class="net-iface">INTERFACE · ' + esc(net.ip || n.ip || '—') + ' / ' + esc(net.mask || '—') + '</div>' +
+      '<div class="net-body">' +
+        '<div class="net-rates">' +
+          rateBox('上传 UPLOAD', fmtRate(net.tx), 'up') +
+          rateBox('下载 DOWNLOAD', fmtRate(net.rx), 'down') +
+        '</div>' +
+        '<div class="net-side">' +
+          '<div class="net-stat"><small>活动连接</small><b>' + (Number(net.conns) || 0) + '</b></div>' +
+          '<div class="net-stat"><small>MAC</small><b>' + esc(net.mac || n.mac || '—') + '</b></div>' +
+          '<div class="net-stat"><small>连接状态</small><b class="' + (online ? 'text-ok' : 'text-danger') + '">' + (online ? '已连接' : '已断开') + '</b></div>' +
+        '</div>' +
+      '</div>' +
+      '</section>';
+
+    // 性能
+    var dots = '';
+    for (var i = 0; i < 5; i++) dots += '<span class="fan-dot' + (i < Math.min(5, activeFans) ? ' on' : '') + '"></span>';
+    html += '<section class="panel performance-panel">' +
+      panelHead('gauge', '性能', '<span class="status-pill ' + tempCls + '"><i class="dot"></i>' + tempLabel + '</span>') +
+      '<div class="perf-main">' +
+        '<div><small>CPU 温度</small><b class="' + (cpuTemp >= 60 ? 'text-warn' : '') + '">' + cpuTemp + '<em>°C</em></b></div>' +
+        '<div><small>风扇总转速</small><b>' + totalRpm.toLocaleString() + '<em>RPM</em></b></div>' +
+      '</div>' +
+      '<div class="fan-dots">' + dots + '</div>' +
+      '<div class="perf-spark">' + spark(n.cpu.history, '#3ddc97') + '</div>' +
+      '</section>';
+
+    // 风扇
+    var fanRows = fans.length ? fans.map(function (f) {
+      return '<div class="fan-row"><div class="fl">' + Icons.svg('fan', 13) + ' ' + esc(f.name) + '</div>' +
+        '<div class="fr">' + (f.rpm ? Number(f.rpm).toLocaleString() + ' RPM' : '—') + '</div></div>';
+    }).join('') : '<div class="empty-line">未检测到风扇</div>';
+    html += '<section class="panel fans-panel">' +
+      panelHead('fan', '风扇', '<span class="panel-sub">' + fans.length + ' 路</span>') +
+      '<div class="fan-total"><b>' + totalRpm.toLocaleString() + '</b><span>RPM</span></div>' +
+      '<div class="fan-list">' + fanRows + '</div>' +
+      '</section>';
 
     // 容器
-    html += '<div class="card"><div class="card-head"><div class="card-title">' + Icons.svg('box', 17) + '容器服务</div>' +
-      '<div class="card-sub">Docker · ' + n.containers.length + ' 个容器</div></div>';
-    if (n.containers.length) {
-      n.containers.forEach(function (ct) {
-        var running = ct.status === '运行中';
-        html += '<div class="ct-item"><div class="ct-ico ' + (ct.warn ? 'warn' : '') + '">' + Icons.svg('box', 16) + '</div>' +
-          '<div class="ct-main"><b>' + esc(ct.name) + '</b><small>' + esc(ct.image) + ' · ' + esc(ct.uptime) + '</small></div>' +
-          '<span class="ct-state badge ' + (running ? 'ok' : 'warn') + '"><i class="dot"></i>' + esc(ct.status) + '</span></div>';
-      });
-    } else {
-      html += '<div style="color:var(--text-3);font-size:12px;text-align:center;padding:10px">未检测到容器</div>';
-    }
-    html += '</div>';
+    var ctRows = containers.length ? containers.slice(0, 4).map(function (ct) {
+      var running = ct.status === '运行中';
+      return '<div class="ct-item"><div class="ct-ico ' + (ct.warn ? 'warn' : '') + '">' + Icons.svg('box', 14) + '</div>' +
+        '<div class="ct-main"><b>' + esc(ct.name) + '</b><small>' + esc(ct.image) + '</small></div>' +
+        '<span class="ct-state badge ' + (running ? 'ok' : 'warn') + '"><i class="dot"></i>' + esc(ct.status) + '</span></div>';
+    }).join('') : '<div class="empty-line">未检测到容器</div>';
+    html += '<section class="panel container-panel">' +
+      panelHead('box', '容器服务', '<span class="panel-sub">Docker</span>') +
+      '<div class="container-summary"><b>' + runningCt + '</b><span>/ ' + containers.length + '</span><small>RUNNING / TOTAL</small></div>' +
+      '<div class="ct-list">' + ctRows + '</div>' +
+      '</section>';
 
-    html += '<div style="text-align:center;color:var(--text-3);font-size:10.5px;padding:6px 0 2px">NodePulse · 节点脉搏 · ' + (c.mode === 'api' ? '实时数据' : '演示数据') + '</div>';
+    // 存储池
+    var poolCards = s.pools.length ? s.pools.map(function (p) {
+      return '<div class="pool-card">' +
+        '<div class="pool-top"><span class="pool-tag">' + esc(p.fs || 'POOL') + '</span><b>' + esc(p.name) + '</b><span class="pool-pct">' + (Number(p.usage) || 0) + '%</span></div>' +
+        bar(p.usage, p.usage > 85 ? 'warn' : '') +
+        '<small>' + fmtSize(p.used) + ' / ' + fmtSize(p.total) + '</small>' +
+        '</div>';
+    }).join('') : '<div class="empty-line">暂无存储池信息</div>';
+    html += '<section class="panel storage-panel">' +
+      panelHead('database', '存储池', '<span class="panel-sub">' + s.pools.length + ' 个存储池 · ' + (s.usage || 0) + '% 已用</span>') +
+      '<div class="storage-summary">' +
+        summaryCell('总容量', fmtSize(s.total)) +
+        summaryCell('已使用', fmtSize(s.used)) +
+        summaryCell('可用', fmtSize(Math.max(0, s.total - s.used))) +
+        summaryCell('使用率', (Number(s.usage) || 0) + '%', 'text-accent') +
+      '</div>' +
+      '<div class="pool-grid">' + poolCards + '</div>' +
+      '</section>';
+
+    // 硬盘
+    var diskCards = disks.length ? disks.map(function (d) {
+      var hc = healthClass(d.health);
+      var hcText = hc === 'ok' ? 'text-ok' : hc === 'warn' ? 'text-warn' : hc === 'danger' ? 'text-danger' : '';
+      return '<div class="disk-card">' +
+        '<div class="disk-card-top"><span class="disk-tag ' + (d.type === 'SSD' ? 'ssd' : '') + '">' + esc(d.type || 'DISK') + '</span>' +
+        '<span class="status-pill ' + hc + '"><i class="dot"></i>' + esc(d.health) + '</span></div>' +
+        '<b>' + esc(d.name) + '</b><small>' + esc(d.model) + ' · ' + esc(d.size) + '</small>' +
+        '<div class="disk-card-foot">' +
+          '<span><small>TEMP</small><b class="' + (d.temp >= 45 ? 'text-warn' : 'text-ok') + '">' + (d.temp ? esc(d.temp) + '°C' : '—') + '</b></span>' +
+          '<span><small>HEALTH</small><b class="' + hcText + '">' + esc(d.health) + '</b></span>' +
+        '</div>' +
+        '</div>';
+    }).join('') : '<div class="empty-line">暂无硬盘信息</div>';
+    html += '<section class="panel disks-panel">' +
+      panelHead('hard-drive', '硬盘', '<span class="panel-sub">' + diskHealthy + ' / ' + disks.length + ' 健康</span>') +
+      '<div class="disk-grid">' + diskCards + '</div>' +
+      '</section>';
+
+    html += '</div>'; // dash-grid
+    html += '<div class="dash-footer">NodePulse · 节点脉搏 · ' + (c.mode === 'api' ? '实时数据' : '演示数据') + ' · 更新于 ' + (state.updatedAt || '--') + '</div>';
+    html += '</div>'; // dash
     return html;
   }
 
@@ -291,7 +358,7 @@
         '</div></div>';
     });
     html += '<button class="add-node" id="add-node">' + Icons.svg('plus', 17) + '添加新节点</button>';
-    html += '<div style="text-align:center;color:var(--text-3);font-size:11px;line-height:1.7;margin-top:18px">' +
+    html += '<div class="nodes-foot" style="text-align:center;color:var(--text-3);font-size:11px;line-height:1.7;margin-top:18px">' +
       '支持 NAS / 服务器 / 迷你主机 / 其他 Linux 设备<br/>在服务端生成 TOKEN 后即可扫码绑定</div>';
     return html;
   }
@@ -299,13 +366,8 @@
   /* ---------------- 设置页 ---------------- */
   function renderSettings() {
     var c = Provider.config();
-    var html = '';
-    html += '<div class="about-logo"><div class="brand-mark">' +
-      '<svg viewBox="0 0 64 64" width="48" height="48"><defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5eead4"/><stop offset="1" stop-color="#3b82f6"/></linearGradient></defs>' +
-      '<rect x="4" y="4" width="56" height="56" rx="16" fill="url(#lg2)"/><path d="M14 33 h9 l5 -12 l7 22 l5 -12 h10" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>' +
-      '<b>NodePulse</b><small>节点脉搏 · v1.0.0 (sideload build)</small></div>';
-
-    html += '<div class="settings-group"><h3>连接设置</h3><div class="setting-card">' +
+    var connection =
+      '<div class="settings-group settings-connection"><h3>连接设置</h3><div class="setting-card">' +
       '<div class="setting-row"><span class="sr-ico">' + Icons.svg('database', 16) + '</span>' +
       '<div class="sr-label"><b>数据来源</b><small>演示模式使用内置模拟数据</small></div>' +
       '<div class="segment" id="seg-mode"><button data-mode="demo" class="' + (c.mode === 'demo' ? 'active' : '') + '">演示</button>' +
@@ -329,13 +391,15 @@
       '<span class="sr-value" style="color:var(--accent)">' + Icons.svg('chevron-right', 16) + '</span></div>' +
       '</div></div>';
 
-    html += '<div class="settings-group"><h3>外观</h3><div class="setting-card">' +
+    var appearance =
+      '<div class="settings-group settings-appearance"><h3>外观</h3><div class="setting-card">' +
       '<div class="setting-row"><span class="sr-ico">' + Icons.svg(c.theme === 'light' ? 'sun' : 'moon', 16) + '</span>' +
       '<div class="sr-label"><b>浅色外观</b><small>切换界面配色</small></div>' +
       '<div class="switch ' + (c.theme === 'light' ? 'on' : '') + '" id="sw-theme"></div></div>' +
       '</div></div>';
 
-    html += '<div class="settings-group"><h3>节点管理</h3><div class="setting-card">' +
+    var nodes =
+      '<div class="settings-group settings-nodes"><h3>节点管理</h3><div class="setting-card">' +
       '<div class="setting-row" id="row-scan"><span class="sr-ico">' + Icons.svg('scan', 16) + '</span>' +
       '<div class="sr-label"><b>扫码添加节点</b><small>扫描服务端生成的绑定二维码</small></div>' +
       '<span class="sr-value">' + Icons.svg('chevron-right', 16) + '</span></div>' +
@@ -343,7 +407,16 @@
       '<div class="sr-label"><b style="color:var(--danger)">清除绑定并重置</b><small>删除本地配置，回到引导页</small></div></div>' +
       '</div></div>';
 
-    html += '<div style="text-align:center;color:var(--text-3);font-size:10.5px;line-height:1.8;padding:4px 0 10px">' +
+    var html = '<div class="about-logo"><div class="brand-mark">' +
+      '<svg viewBox="0 0 64 64" width="48" height="48"><defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5eead4"/><stop offset="1" stop-color="#3b82f6"/></linearGradient></defs>' +
+      '<rect x="4" y="4" width="56" height="56" rx="16" fill="url(#lg2)"/><path d="M14 33 h9 l5 -12 l7 22 l5 -12 h10" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>' +
+      '<b>NodePulse</b><small>节点脉搏 · v1.1.0 (sideload build)</small></div>';
+
+    html += '<div class="settings-columns">' +
+      '<div class="settings-column">' + connection + '</div>' +
+      '<div class="settings-column">' + appearance + nodes + '</div>' +
+      '</div>';
+    html += '<div class="settings-foot" style="text-align:center;color:var(--text-3);font-size:10.5px;line-height:1.8;padding:4px 0 10px">' +
       '非官方仿制演示应用 · 与 NasPulse 无关联<br/>API 契约见 docs/API.md</div>';
     return html;
   }
@@ -607,5 +680,6 @@
     };
   });
 
+  setInterval(tickClock, 1000);
   boot();
 })();
