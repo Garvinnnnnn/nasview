@@ -38,10 +38,21 @@ if [ "$MODE" = bare ] && [ -z "$NODE_BIN" ]; then echo "需要 Node.js 18+，或
 if [ "$MODE" = docker ] && [ -z "$DOCKER_BIN" ]; then echo "需要 Docker，或先安装 Node.js 18+" >&2; exit 1; fi
 
 if command -v curl >/dev/null 2>&1; then DL="curl -fsSL -o"; else DL="wget -qO"; fi
-mkdir -p "$DIR" 2>/dev/null
-if [ ! -w "$DIR" ]; then DIR="$HOME/nodepulse"; mkdir -p "$DIR"; fi
+# /opt 通常需要 root；非 root 时自动退回用户目录，且不能让 set -e 直接退出
+if ! mkdir -p "$DIR" 2>/dev/null || [ ! -w "$DIR" ]; then
+  echo "==> $DIR 不可写，改用 $HOME/nodepulse"
+  DIR="$HOME/nodepulse"
+  mkdir -p "$DIR" || { echo "无法创建安装目录 $DIR" >&2; exit 1; }
+fi
 mkdir -p "$DIR/data"
 cd "$DIR"
+
+if [ "$MODE" = docker ] && ! docker info >/dev/null 2>&1; then
+  echo "!! 当前用户无法访问 Docker（需要 sudo 或加入 docker 组）" >&2
+  echo "!! 请改用：sudo env NP_BASE_URL=$BASE_URL NP_DIR=$DIR sh $0" >&2
+  echo "!! 或先安装 Node.js 18+ 后加 NP_MODE=bare" >&2
+  exit 1
+fi
 
 echo "==> 下载服务端文件 ($MODE)…"
 $DL "$DIR/index.js" "$BASE_URL/index.js"
