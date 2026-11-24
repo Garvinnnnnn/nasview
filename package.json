@@ -8,7 +8,9 @@
     "add:ios": "cap add ios",
     "sync:ios": "cap sync ios",
     "open:ios": "cap open ios",
-    "build:prepare": "node scripts/gen-icons.js && cap sync ios"
+    "build:prepare": "node scripts/gen-icons.js && cap sync ios",
+    "server": "node server/index.js",
+    "deploy:server": "bash server/deploy.sh"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.1.2"

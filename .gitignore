@@ -8,3 +8,10 @@ signing-secrets.txt
 certs/
 *.p12
 *.mobileprovision
+
+# 服务端本地配置与数据（含 TOKEN，勿提交）
+server/.env
+server/data/
+server/.deploy/
+nodepulse.log
+nodepulse.pid

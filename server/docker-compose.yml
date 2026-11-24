@@ -1,0 +1,23 @@
+services:
+  nodepulse:
+    build: .
+    container_name: nodepulse
+    restart: unless-stopped
+    ports:
+      - "${NP_PORT:-8787}:8787"
+    env_file: .env
+    environment:
+      NP_PORT: 8787
+      NP_DATA_DIR: /app/data
+    volumes:
+      # 只读挂载宿主机 /proc /sys，服务端会优先读取 /host/proc /host/sys
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - nodepulse-data:/app/data
+    # SMART 需要访问 /dev 下的磁盘设备；设为 true 可开启（NP_PRIVILEGED=true）
+    privileged: ${NP_PRIVILEGED:-false}
+
+volumes:
+  nodepulse-data:

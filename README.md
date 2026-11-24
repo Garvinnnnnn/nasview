@@ -31,6 +31,12 @@ nasview/
 │   ├── gen-icons.js          # 生成各尺寸 PNG 图标
 │   ├── build_ios.sh          # macOS 上构建签名 IPA（付费账号）
 │   └── build_ios_free.sh     # 个人免费 Apple ID 构建
+├── server/                   # 参考服务端（零依赖 Node.js，采集真实指标）
+│   ├── index.js              # API 实现
+│   ├── deploy.sh             # 本地一键部署到服务器
+│   ├── install.sh            # 服务器端一键安装
+│   ├── Dockerfile / docker-compose.yml
+│   └── .env.example
 ├── .github/workflows/build-ios.yml   # GitHub Actions 云打包
 ├── capacitor.config.json
 └── package.json
@@ -111,8 +117,14 @@ base64 -i profile.mobileprovision | tr -d '\n'
 
 App 已内置对接层。两种路径：
 
-1. **有现成服务端**：按 [docs/API.md](docs/API.md) 的契约提供接口，在 App 设置页填地址与 TOKEN，切到「真实 NAS」模式。
-2. **没有服务端**：在 NAS 上跑一个把系统信息包装成上述 JSON 的小服务即可（Python/Node 都行），App 指向它。
+1. **用本仓库的参考服务端（推荐）**：一条命令部署到 NAS / 服务器，自动采集 CPU、内存、存储池、硬盘 SMART、温度风扇、网络、Docker 容器等真实数据：
+
+   ```bash
+   bash server/deploy.sh root@192.168.1.10
+   ```
+
+   部署完终端会打印服务端地址、TOKEN 和可直接粘贴的连接串。详见 [docs/API.md](docs/API.md)。
+2. **有现成服务端**：按 [docs/API.md](docs/API.md) 的契约提供接口（只需 `GET /api/v1/nodes` 和 `GET /api/v1/nodes/{id}` + Bearer TOKEN），在 App 设置页填地址与 TOKEN，切到「真实 NAS」模式。
 
 演示数据用于先看界面效果，随时可在设置页切回。
 
